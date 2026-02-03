@@ -14,15 +14,9 @@ This repository contains a **starter MVP** for the "Electronic CEO Office" descr
 ### 1) Install
 ```bash
 node --version
-npm install
 ```
 
-### 2) Configure env
-```bash
-cp .env.example .env
-```
-
-### 3) Run the app
+### 2) Run the app
 ```bash
 npm run dev
 ```
@@ -156,8 +150,6 @@ See `HANDOFF.md` for a step-by-step guide on local usage, API surface, and produ
 cp .env.example .env
 docker compose up --build
 ```
-
-Then open: http://localhost:3000
 
 ## Database schema
 
