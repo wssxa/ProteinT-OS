@@ -1,0 +1,25 @@
+{
+  "users": [
+    {
+      "id": "user_admin_seed",
+      "name": "Hongyu Kang",
+      "nameZh": "康弘宇",
+      "role": "Admin",
+      "createdAt": "2026-01-15T00:00:00.000Z"
+    },
+    {
+      "id": "user_admin_jin_chuan",
+      "name": "Jin Chuan",
+      "nameZh": "金川",
+      "role": "Admin",
+      "createdAt": "2026-01-15T00:00:00.000Z"
+    },
+    {
+      "id": "user_admin_jie_li",
+      "name": "Jie Li",
+      "nameZh": "李杰",
+      "role": "Admin",
+      "createdAt": "2026-01-15T00:00:00.000Z"
+    }
+  ]
+}
