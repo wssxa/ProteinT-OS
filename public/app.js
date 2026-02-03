@@ -41,6 +41,14 @@ const loadFinanceExceptions = async () => apiGet("/api/finance/exceptions");
 
 const loadAudit = async () => apiGet("/api/audit");
 
+const runCopilotQuery = async (payload) => {
+  return submitJson("/api/copilot/query", payload);
+};
+
+const runPlaybook = async (payload) => {
+  return submitJson("/api/playbooks/run", payload);
+};
+
 const submitJson = async (url, payload) => {
   const adminKey = sessionStorage.getItem("adminKey");
   const sessionToken = sessionStorage.getItem("sessionToken");
@@ -58,6 +66,82 @@ const submitJson = async (url, payload) => {
     throw new Error(error.error || "Submission failed");
   }
   return response.json();
+};
+
+const renderSources = (container, sources) => {
+  container.innerHTML = "";
+  if (!sources.length) {
+    container.textContent = "No sources found.";
+    return;
+  }
+  sources.forEach((source) => {
+    const card = document.createElement("div");
+    card.className = "list-item";
+    const title = document.createElement("h3");
+    title.textContent = source.title || source.docId;
+    const meta = document.createElement("p");
+    meta.textContent = `${source.spaceType || "space"} • ${source.path || "no path"}`;
+    card.appendChild(title);
+    card.appendChild(meta);
+    if (source.excerpt) {
+      const excerpt = document.createElement("p");
+      excerpt.textContent = source.excerpt;
+      card.appendChild(excerpt);
+    }
+    if (source.path) {
+      const link = document.createElement("a");
+      link.href = source.path;
+      link.target = "_blank";
+      link.rel = "noopener";
+      link.textContent = "Open document";
+      link.className = "secondary-button";
+      card.appendChild(link);
+    }
+    container.appendChild(card);
+  });
+};
+
+const renderScopeInfo = (container, scope, assumptions) => {
+  container.innerHTML = "";
+  const scopeCard = document.createElement("div");
+  scopeCard.className = "list-item";
+  scopeCard.innerHTML = `<h3>Scope Used</h3><p>${scope?.spaceType || "unknown"} • ${
+    scope?.spaceName || "unspecified"
+  }</p>`;
+  container.appendChild(scopeCard);
+  const assumptionCard = document.createElement("div");
+  assumptionCard.className = "list-item";
+  const assumptionTitle = document.createElement("h3");
+  assumptionTitle.textContent = "Assumptions";
+  assumptionCard.appendChild(assumptionTitle);
+  const list = document.createElement("ul");
+  list.className = "bullet-list";
+  (assumptions || []).forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = item;
+    list.appendChild(li);
+  });
+  assumptionCard.appendChild(list);
+  container.appendChild(assumptionCard);
+};
+
+const renderKeyNumbers = (container, numbers) => {
+  container.innerHTML = "";
+  if (!numbers || Object.keys(numbers).length === 0) {
+    container.textContent = "No key numbers available.";
+    return;
+  }
+  Object.entries(numbers).forEach(([label, value]) => {
+    const card = document.createElement("div");
+    card.className = "list-item";
+    const title = document.createElement("h3");
+    title.textContent = label;
+    const meta = document.createElement("p");
+    meta.textContent = value === null || value === undefined ? "—" : String(value);
+    card.appendChild(title);
+    card.appendChild(meta);
+    container.appendChild(card);
+  });
 };
 
 const renderSubmissions = (items) => {
@@ -362,6 +446,20 @@ const render = async () => {
   const financeForm = document.getElementById("financeForm");
   const logoutButton = document.getElementById("logoutButton");
   const sessionExpiry = document.getElementById("sessionExpiry");
+  const copilotForm = document.getElementById("copilotForm");
+  const copilotAnswer = document.getElementById("copilotAnswer");
+  const copilotSources = document.getElementById("copilotSources");
+  const copilotScope = document.getElementById("copilotScope");
+  const playbookPolicyForm = document.getElementById("playbookPolicyForm");
+  const playbookPolicyAnswer = document.getElementById("playbookPolicyAnswer");
+  const playbookPolicySources = document.getElementById("playbookPolicySources");
+  const playbookPolicyActions = document.getElementById("playbookPolicyActions");
+  const playbookProjectForm = document.getElementById("playbookProjectForm");
+  const playbookProjectAnswer = document.getElementById("playbookProjectAnswer");
+  const playbookProjectSources = document.getElementById("playbookProjectSources");
+  const playbookProjectActions = document.getElementById("playbookProjectActions");
+  const playbookProjectNumbers = document.getElementById("playbookProjectNumbers");
+  const playbookProjectSelect = document.getElementById("playbookProjectSelect");
 
   const updateLoginStatus = () => {
     const userName = sessionStorage.getItem("sessionUser");
@@ -484,6 +582,85 @@ const render = async () => {
     const refreshed = await loadFinanceExceptions();
     renderFinanceExceptions(refreshed.exceptions);
   });
+
+  if (copilotForm) {
+    copilotForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(copilotForm);
+      const payload = Object.fromEntries(formData.entries());
+      const scope =
+        payload.spaceType || payload.spaceName
+          ? { spaceType: payload.spaceType, spaceName: payload.spaceName }
+          : undefined;
+      const response = await runCopilotQuery({
+        question: payload.question,
+        scope,
+        mode: payload.mode
+      });
+      if (response.needsClarification) {
+        copilotAnswer.textContent = response.question;
+        copilotSources.textContent = "Clarification needed.";
+        renderScopeInfo(copilotScope, null, []);
+        return;
+      }
+      copilotAnswer.textContent = response.answer;
+      renderSources(copilotSources, response.sourcesUsed || []);
+      renderScopeInfo(copilotScope, response.scopeUsed, response.assumptions);
+      copilotForm.reset();
+    });
+  }
+
+  if (playbookPolicyForm) {
+    playbookPolicyForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(playbookPolicyForm);
+      const payload = Object.fromEntries(formData.entries());
+      const response = await runPlaybook({
+        playbookId: "P2_POLICY_INTERPRETER",
+        params: { question: payload.question }
+      });
+      playbookPolicyAnswer.textContent = response.recommendation || "No answer returned.";
+      renderSources(playbookPolicySources, response.sourcesUsed || []);
+      playbookPolicyActions.innerHTML = "";
+      (response.nextActions || []).forEach((action) => {
+        const li = document.createElement("li");
+        li.textContent = action;
+        playbookPolicyActions.appendChild(li);
+      });
+      playbookPolicyForm.reset();
+    });
+  }
+
+  if (playbookProjectForm) {
+    playbookProjectForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const formData = new FormData(playbookProjectForm);
+      const payload = Object.fromEntries(formData.entries());
+      const response = await runPlaybook({
+        playbookId: "P3_PROJECT_HEALTH",
+        params: { projectId: payload.projectId }
+      });
+      playbookProjectAnswer.textContent = response.recommendation || "No answer returned.";
+      renderSources(playbookProjectSources, response.sourcesUsed || []);
+      renderKeyNumbers(playbookProjectNumbers, response.keyNumbers || {});
+      playbookProjectActions.innerHTML = "";
+      (response.nextActions || []).forEach((action) => {
+        const li = document.createElement("li");
+        li.textContent = action;
+        playbookProjectActions.appendChild(li);
+      });
+    });
+  }
+
+  if (playbookProjectSelect) {
+    playbookProjectSelect.innerHTML = '<option value="">Select a project</option>';
+    (projects.projects || []).forEach((project) => {
+      const option = document.createElement("option");
+      option.value = project.id;
+      option.textContent = project.name;
+      playbookProjectSelect.appendChild(option);
+    });
+  }
 };
 
 render().catch((error) => {

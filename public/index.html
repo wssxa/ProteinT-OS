@@ -134,6 +134,95 @@
 
       <section class="panel admin-only" data-role="admin">
         <div>
+          <h2>Copilot (Admin)</h2>
+          <p>Ask a question and the system will retrieve relevant evidence.</p>
+        </div>
+        <form id="copilotForm" class="form-grid">
+          <label class="full">
+            Question
+            <input name="question" placeholder="What is our travel reimbursement limit?" required />
+          </label>
+          <label>
+            Scope Type (optional)
+            <select name="spaceType">
+              <option value="">Auto</option>
+              <option value="project">Project</option>
+              <option value="department">Department</option>
+              <option value="policy">Policy</option>
+              <option value="person">Person</option>
+            </select>
+          </label>
+          <label>
+            Scope Name (optional)
+            <input name="spaceName" placeholder="D2C Growth Push / 市场部" />
+          </label>
+          <label>
+            Mode
+            <select name="mode">
+              <option value="qna" selected>Q&amp;A</option>
+              <option value="retrieve_only">Retrieve Only</option>
+            </select>
+          </label>
+          <button type="submit">Run Copilot</button>
+        </form>
+        <div id="copilotAnswer" class="answer-box">Ask a question to see results.</div>
+        <div class="split">
+          <div>
+            <h3 class="list-title">Sources Used</h3>
+            <div id="copilotSources" class="list"></div>
+          </div>
+          <div>
+            <h3 class="list-title">Scope &amp; Assumptions</h3>
+            <div id="copilotScope" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Playbooks (Admin)</h2>
+          <p>Run reusable CEO playbooks with evidence and next actions.</p>
+        </div>
+        <div class="playbook-grid">
+          <div class="playbook-card">
+            <h3>P2 Policy Interpreter</h3>
+            <form id="playbookPolicyForm" class="form-grid">
+              <label class="full">
+                Question
+                <input name="question" placeholder="What is the leave policy for contractors?" required />
+              </label>
+              <button type="submit">Run P2</button>
+            </form>
+            <div id="playbookPolicyAnswer" class="answer-box">No run yet.</div>
+            <h4 class="list-title">Sources Used</h4>
+            <div id="playbookPolicySources" class="list"></div>
+            <h4 class="list-title">Next Actions</h4>
+            <ul id="playbookPolicyActions" class="bullet-list"></ul>
+          </div>
+          <div class="playbook-card">
+            <h3>P3 Project Health &amp; Next Actions</h3>
+            <form id="playbookProjectForm" class="form-grid">
+              <label>
+                Project
+                <select name="projectId" id="playbookProjectSelect" required>
+                  <option value="">Select a project</option>
+                </select>
+              </label>
+              <button type="submit">Run P3</button>
+            </form>
+            <div id="playbookProjectAnswer" class="answer-box">No run yet.</div>
+            <h4 class="list-title">Key Numbers</h4>
+            <div id="playbookProjectNumbers" class="list"></div>
+            <h4 class="list-title">Sources Used</h4>
+            <div id="playbookProjectSources" class="list"></div>
+            <h4 class="list-title">Next Actions</h4>
+            <ul id="playbookProjectActions" class="bullet-list"></ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
           <h2>Submission Stubs (WeCom → API)</h2>
           <p>Use these endpoints to connect WeCom submissions.</p>
         </div>
@@ -152,6 +241,8 @@
           <code>GET /api/finance</code>
           <code>GET /api/finance/exceptions</code>
           <code>GET /api/audit</code>
+          <code>POST /api/copilot/query</code>
+          <code>POST /api/playbooks/run</code>
           <code>GET /api/my/submissions</code>
           <code>POST /api/projects (admin)</code>
           <code>POST /api/tasks (admin)</code>

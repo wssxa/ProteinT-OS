@@ -206,6 +206,46 @@ main {
   color: #b5bcc9;
 }
 
+.answer-box {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: #141a26;
+  border: 1px solid #283146;
+  font-size: 13px;
+  color: #d6dbea;
+  white-space: pre-wrap;
+}
+
+.split {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+}
+
+.playbook-grid {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+}
+
+.playbook-card {
+  background: #111722;
+  border: 1px solid #273042;
+  border-radius: 14px;
+  padding: 18px;
+  display: grid;
+  gap: 12px;
+}
+
+.bullet-list {
+  list-style: disc;
+  padding-left: 18px;
+  display: grid;
+  gap: 6px;
+  color: #c7cdd8;
+  font-size: 13px;
+}
+
 .pill-list {
   display: flex;
   flex-wrap: wrap;
