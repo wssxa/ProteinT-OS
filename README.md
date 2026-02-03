@@ -136,6 +136,10 @@ curl -X POST http://localhost:3000/api/submissions/project-update \
 
 See `DEPLOYMENT.md` for IT handoff details and production recommendations.
 
+## Handoff guide (for final polish)
+
+See `HANDOFF.md` for a step-by-step guide on local usage, API surface, and production polish checklist.
+
 ## Docker quick start
 
 ```bash
