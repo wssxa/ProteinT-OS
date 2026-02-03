@@ -76,11 +76,23 @@ This writes `db/seed.sql`, which can be applied after `db/schema.sql`.
 
 Current login uses `/api/auth/wecom/mock` (stub).
 
+Current behavior:
+
+- Admin endpoints require an Admin role (based on `seed.json`) or the `ADMIN_KEY` header.
+- Reporter sessions can access personal endpoints like `/api/my/tasks` and `/api/my/submissions`.
+
 Production plan:
 
 - Implement WeCom OAuth and map WeCom user to `users`.
-- Enforce RBAC (Reporter vs Admin) at API level.
 - Remove admin-key reliance (keep for emergency use only).
+
+### Session TTL
+
+Sessions expire after 12 hours by default. Override with:
+
+```bash
+SESSION_TTL_HOURS=24
+```
 
 ## 6) Network / Security
 

@@ -152,11 +152,13 @@
           <code>GET /api/finance</code>
           <code>GET /api/finance/exceptions</code>
           <code>GET /api/audit</code>
+          <code>GET /api/my/submissions</code>
           <code>POST /api/projects (admin)</code>
           <code>POST /api/tasks (admin)</code>
           <code>POST /api/users (admin)</code>
           <code>POST /api/decisions (admin)</code>
           <code>POST /api/finance</code>
+          <code>POST /api/auth/logout</code>
         </div>
       </section>
 
@@ -172,10 +174,16 @@
           </label>
           <button type="submit">Login</button>
         </form>
-        <div id="loginStatus" class="status-pill">Not logged in</div>
+        <div class="inline-actions">
+          <div id="loginStatus" class="status-pill">Not logged in</div>
+          <button id="logoutButton" class="secondary-button hidden" type="button">
+            Logout
+          </button>
+        </div>
+        <div id="sessionExpiry" class="status-hint"></div>
       </section>
 
-      <section class="panel">
+      <section class="panel admin-only" data-role="admin">
         <div>
           <h2>Project Registry (Admin)</h2>
           <p>Create projects that map to the CEO pages and task ledger.</p>
@@ -210,7 +218,7 @@
         </form>
       </section>
 
-      <section class="panel">
+      <section class="panel admin-only" data-role="admin">
         <div>
           <h2>Task Ledger (Admin)</h2>
           <p>Create tasks linked to projects for workload observability.</p>
@@ -245,7 +253,7 @@
         </form>
       </section>
 
-      <section class="panel">
+      <section class="panel admin-only" data-role="admin">
         <div>
           <h2>Latest Projects & Tasks (Preview)</h2>
           <p>Shows the most recent projects and tasks stored by the backend.</p>
@@ -441,7 +449,7 @@
         </form>
       </section>
 
-      <section class="panel">
+      <section class="panel admin-only" data-role="admin">
         <div>
           <h2>Latest Submissions (Preview)</h2>
           <p>Shows the most recent submissions received by the backend.</p>

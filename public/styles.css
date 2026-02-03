@@ -166,6 +166,33 @@ main {
   width: fit-content;
 }
 
+.inline-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.secondary-button {
+  padding: 8px 14px;
+  border-radius: 999px;
+  border: 1px solid #2f3a4d;
+  background: transparent;
+  color: #c7cdd8;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.secondary-button:hover {
+  border-color: #6c8cff;
+  color: #e7ebf3;
+}
+
+.status-hint {
+  font-size: 12px;
+  color: #9aa4b2;
+}
+
 .hidden {
   display: none !important;
 }

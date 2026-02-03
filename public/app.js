@@ -1,72 +1,45 @@
-const loadConfig = async () => {
-  const response = await fetch("/api/config");
-  return response.json();
-};
-
-const loadDigest = async () => {
-  const response = await fetch("/api/digest/daily");
-  return response.json();
-};
-
-const loadSubmissions = async () => {
-  const response = await fetch("/api/submissions");
-  return response.json();
-};
-
-const loadProjects = async () => {
-  const response = await fetch("/api/projects");
-  return response.json();
-};
-
-const loadTasks = async () => {
-  const response = await fetch("/api/tasks");
-  return response.json();
-};
-
-const loadMyTasks = async () => {
+const apiGet = async (url) => {
   const sessionToken = sessionStorage.getItem("sessionToken");
-  const response = await fetch("/api/my/tasks", {
+  const response = await fetch(url, {
     headers: {
       ...(sessionToken ? { "x-session-token": sessionToken } : {})
     }
   });
+  if (!response.ok) {
+    return { error: true, status: response.status };
+  }
   return response.json();
+};
+
+const loadConfig = async () => apiGet("/api/config");
+
+const loadDigest = async () => apiGet("/api/digest/daily");
+
+const loadSubmissions = async () => apiGet("/api/submissions");
+
+const loadMySubmissions = async () => apiGet("/api/my/submissions");
+
+const loadProjects = async () => apiGet("/api/projects");
+
+const loadTasks = async () => apiGet("/api/tasks");
+
+const loadMyTasks = async () => {
+  return apiGet("/api/my/tasks");
 };
 
 const loadCurrentUser = async () => {
-  const sessionToken = sessionStorage.getItem("sessionToken");
-  const response = await fetch("/api/me", {
-    headers: {
-      ...(sessionToken ? { "x-session-token": sessionToken } : {})
-    }
-  });
-  return response.json();
+  return apiGet("/api/me");
 };
 
-const loadExceptions = async () => {
-  const response = await fetch("/api/exceptions");
-  return response.json();
-};
+const loadExceptions = async () => apiGet("/api/exceptions");
 
-const loadDecisions = async () => {
-  const response = await fetch("/api/decisions");
-  return response.json();
-};
+const loadDecisions = async () => apiGet("/api/decisions");
 
-const loadCompliance = async () => {
-  const response = await fetch("/api/compliance");
-  return response.json();
-};
+const loadCompliance = async () => apiGet("/api/compliance");
 
-const loadFinanceExceptions = async () => {
-  const response = await fetch("/api/finance/exceptions");
-  return response.json();
-};
+const loadFinanceExceptions = async () => apiGet("/api/finance/exceptions");
 
-const loadAudit = async () => {
-  const response = await fetch("/api/audit");
-  return response.json();
-};
+const loadAudit = async () => apiGet("/api/audit");
 
 const submitJson = async (url, payload) => {
   const adminKey = sessionStorage.getItem("adminKey");
@@ -315,17 +288,34 @@ const renderFinanceExceptions = (items) => {
 
 const render = async () => {
   const config = await loadConfig();
-  const digest = await loadDigest();
-  const submissions = await loadSubmissions();
-  const projects = await loadProjects();
-  const tasks = await loadTasks();
-  const exceptions = await loadExceptions();
-  const decisions = await loadDecisions();
-  const compliance = await loadCompliance();
-  const financeExceptions = await loadFinanceExceptions();
-  const audit = await loadAudit();
-  const myTasks = await loadMyTasks();
   const me = await loadCurrentUser();
+  const isAdmin = me.user?.role === "Admin";
+
+  const [
+    digest,
+    submissions,
+    mySubmissions,
+    projects,
+    tasks,
+    exceptions,
+    decisions,
+    compliance,
+    financeExceptions,
+    audit,
+    myTasks
+  ] = await Promise.all([
+    isAdmin ? loadDigest() : Promise.resolve({ totals: { submissions: 0, projectUpdates: 0, meetingMemos: 0 } }),
+    isAdmin ? loadSubmissions() : Promise.resolve({ submissions: [] }),
+    isAdmin ? Promise.resolve({ submissions: [] }) : loadMySubmissions(),
+    isAdmin ? loadProjects() : Promise.resolve({ projects: [] }),
+    isAdmin ? loadTasks() : Promise.resolve({ tasks: [] }),
+    isAdmin ? loadExceptions() : Promise.resolve({ exceptions: [] }),
+    isAdmin ? loadDecisions() : Promise.resolve({ decisions: [] }),
+    isAdmin ? loadCompliance() : Promise.resolve({ compliance: [] }),
+    isAdmin ? loadFinanceExceptions() : Promise.resolve({ exceptions: [] }),
+    isAdmin ? loadAudit() : Promise.resolve({ events: [] }),
+    loadMyTasks()
+  ]);
 
   const adminName = document.getElementById("adminName");
   const wecomScope = document.getElementById("wecomScope");
@@ -345,20 +335,21 @@ const render = async () => {
     departments.appendChild(span);
   });
 
-  document.getElementById("digestTotal").textContent = digest.totals.submissions;
-  document.getElementById("digestUpdates").textContent = digest.totals.projectUpdates;
-  document.getElementById("digestMemos").textContent = digest.totals.meetingMemos;
+  document.getElementById("digestTotal").textContent = digest.totals?.submissions ?? 0;
+  document.getElementById("digestUpdates").textContent = digest.totals?.projectUpdates ?? 0;
+  document.getElementById("digestMemos").textContent = digest.totals?.meetingMemos ?? 0;
 
-  renderSubmissions(submissions.submissions);
-  renderProjects(projects.projects);
-  renderTasks(tasks.tasks);
-  renderMyDueItems(submissions.submissions, sessionStorage.getItem("sessionUser"));
+  const visibleSubmissions = isAdmin ? submissions.submissions : mySubmissions.submissions;
+  renderSubmissions(visibleSubmissions || []);
+  renderProjects(projects.projects || []);
+  renderTasks(tasks.tasks || []);
+  renderMyDueItems(visibleSubmissions || [], sessionStorage.getItem("sessionUser"));
   renderExceptions(exceptions.exceptions);
   renderDecisions(decisions.decisions);
-  renderCompliance(compliance.compliance);
-  renderFinanceExceptions(financeExceptions.exceptions);
-  renderAudit(audit.events);
-  renderMyTasks(myTasks.tasks);
+  renderCompliance(compliance.compliance || []);
+  renderFinanceExceptions(financeExceptions.exceptions || []);
+  renderAudit(audit.events || []);
+  renderMyTasks(myTasks.tasks || []);
 
   const projectForm = document.getElementById("projectForm");
   const memoForm = document.getElementById("memoForm");
@@ -369,12 +360,16 @@ const render = async () => {
   const interfaceMode = document.getElementById("interfaceMode");
   const taskUpdateForm = document.getElementById("taskUpdateForm");
   const financeForm = document.getElementById("financeForm");
+  const logoutButton = document.getElementById("logoutButton");
+  const sessionExpiry = document.getElementById("sessionExpiry");
 
   const updateLoginStatus = () => {
     const userName = sessionStorage.getItem("sessionUser");
     if (!userName) {
       loginStatus.textContent = "Not logged in";
+      sessionExpiry.textContent = "";
       interfaceMode.textContent = "Reporter";
+      logoutButton.classList.add("hidden");
       document.querySelectorAll("[data-role='admin']").forEach((section) => {
         section.classList.add("hidden");
       });
@@ -384,6 +379,13 @@ const render = async () => {
       return;
     }
     loginStatus.textContent = `Logged in as ${userName}`;
+    if (me.expiresAt) {
+      const expires = new Date(me.expiresAt);
+      sessionExpiry.textContent = `Session expires ${expires.toLocaleString()}`;
+    } else {
+      sessionExpiry.textContent = "";
+    }
+    logoutButton.classList.remove("hidden");
     if (me.user?.role === "Admin") {
       interfaceMode.textContent = "Admin";
       document.querySelectorAll("[data-role='admin']").forEach((section) => {
@@ -414,6 +416,13 @@ const render = async () => {
     sessionStorage.setItem("sessionUser", response.user.name);
     window.location.reload();
     loginForm.reset();
+  });
+
+  logoutButton.addEventListener("click", async () => {
+    await submitJson("/api/auth/logout", {});
+    sessionStorage.removeItem("sessionToken");
+    sessionStorage.removeItem("sessionUser");
+    window.location.reload();
   });
 
   projectForm.addEventListener("submit", async (event) => {

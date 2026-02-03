@@ -7,6 +7,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const port = process.env.PORT || 3000;
+const sessionTtlHours = Number(process.env.SESSION_TTL_HOURS) || 12;
 
 const dataDir = path.join(__dirname, "data");
 const submissionsPath = path.join(dataDir, "submissions.json");
@@ -67,12 +68,18 @@ const logAuditEvent = (event) => {
   writeJsonFile(auditPath, data);
 };
 
-const isAdmin = (req, seed) => {
+const isAdmin = (req, seed, session) => {
   const adminKey = process.env.ADMIN_KEY;
-  if (!adminKey) {
+  if (adminKey && req.headers["x-admin-key"] === adminKey) {
     return true;
   }
-  return req.headers["x-admin-key"] === adminKey;
+  if (!session?.user) {
+    return false;
+  }
+  if (session.user.role === "Admin") {
+    return true;
+  }
+  return seed.admins?.includes(session.user.name);
 };
 
 const daysBetween = (from, to) => {
@@ -158,12 +165,27 @@ const computeCompliance = () => {
   }));
 };
 
+const purgeExpiredSessions = (data) => {
+  const now = Date.now();
+  const filtered = data.sessions.filter((session) => {
+    if (!session.expiresAt) {
+      return true;
+    }
+    return new Date(session.expiresAt).getTime() > now;
+  });
+  if (filtered.length !== data.sessions.length) {
+    writeJsonFile(sessionsPath, { sessions: filtered });
+  }
+  return filtered;
+};
+
 const getSessionUser = (req) => {
   const token = req.headers["x-session-token"];
   if (!token) {
     return null;
   }
-  const { sessions } = readJsonFile(sessionsPath, { sessions: [] });
+  const data = readJsonFile(sessionsPath, { sessions: [] });
+  const sessions = purgeExpiredSessions(data);
   return sessions.find((session) => session.token === token) || null;
 };
 
@@ -171,6 +193,19 @@ const requireAuth = (req, res) => {
   const session = getSessionUser(req);
   if (!session) {
     sendJson(res, 401, { error: "Authentication required" });
+    return null;
+  }
+  return session;
+};
+
+const requireAdmin = (req, res) => {
+  const session = requireAuth(req, res);
+  if (!session) {
+    return null;
+  }
+  const seed = loadSeed();
+  if (!isAdmin(req, seed, session)) {
+    sendJson(res, 403, { error: "Admin access required" });
     return null;
   }
   return session;
@@ -235,6 +270,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/api/digest/daily") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { submissions } = readSubmissions();
     const today = new Date().toISOString().slice(0, 10);
     const todayItems = submissions.filter((item) => item.createdAt?.startsWith(today));
@@ -251,42 +290,84 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/api/exceptions") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const exceptions = computeExceptions();
     return sendJson(res, 200, { exceptions });
   }
 
   if (req.method === "GET" && url.pathname === "/api/submissions") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { submissions } = readSubmissions();
     return sendJson(res, 200, { submissions });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/my/submissions") {
+    const auth = requireAuth(req, res);
+    if (!auth) {
+      return;
+    }
+    const { submissions } = readSubmissions();
+    const mine = submissions.filter((item) => item.owner === auth.user?.name);
+    return sendJson(res, 200, { submissions: mine });
+  }
+
   if (req.method === "GET" && url.pathname === "/api/decisions") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { decisions } = readJsonFile(decisionsPath, { decisions: [] });
     return sendJson(res, 200, { decisions });
   }
 
   if (req.method === "GET" && url.pathname === "/api/finance") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { items } = readJsonFile(financePath, { items: [] });
     return sendJson(res, 200, { items });
   }
 
   if (req.method === "GET" && url.pathname === "/api/finance/exceptions") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { items } = readJsonFile(financePath, { items: [] });
     const exceptions = items.filter((item) => item.exceptionReason);
     return sendJson(res, 200, { exceptions });
   }
 
   if (req.method === "GET" && url.pathname === "/api/compliance") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const compliance = computeCompliance();
     return sendJson(res, 200, { compliance });
   }
 
   if (req.method === "GET" && url.pathname === "/api/projects") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { projects } = readJsonFile(projectsPath, { projects: [] });
     return sendJson(res, 200, { projects });
   }
 
   if (req.method === "GET" && url.pathname === "/api/tasks") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { tasks } = readJsonFile(tasksPath, { tasks: [] });
     return sendJson(res, 200, { tasks });
   }
@@ -302,6 +383,10 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (req.method === "GET" && url.pathname === "/api/users") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { users } = readJsonFile(usersPath, { users: [] });
     return sendJson(res, 200, { users });
   }
@@ -311,10 +396,14 @@ const server = http.createServer(async (req, res) => {
     if (!session) {
       return sendJson(res, 200, { user: null });
     }
-    return sendJson(res, 200, { user: session.user });
+    return sendJson(res, 200, { user: session.user, expiresAt: session.expiresAt });
   }
 
   if (req.method === "GET" && url.pathname === "/api/audit") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
     const { events } = readJsonFile(auditPath, { events: [] });
     return sendJson(res, 200, { events });
   }
@@ -339,7 +428,8 @@ const server = http.createServer(async (req, res) => {
       const session = {
         token,
         user,
-        createdAt: new Date().toISOString()
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + sessionTtlHours * 60 * 60 * 1000).toISOString()
       };
       const data = readJsonFile(sessionsPath, { sessions: [] });
       data.sessions.unshift(session);
@@ -353,6 +443,21 @@ const server = http.createServer(async (req, res) => {
     } catch (error) {
       return sendJson(res, 400, { error: "Invalid JSON payload" });
     }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/auth/logout") {
+    const auth = requireAuth(req, res);
+    if (!auth) {
+      return;
+    }
+    const data = readJsonFile(sessionsPath, { sessions: [] });
+    const updated = data.sessions.filter((session) => session.token !== auth.token);
+    writeJsonFile(sessionsPath, { sessions: updated });
+    logAuditEvent({
+      type: "logout",
+      actor: auth.user?.name
+    });
+    return sendJson(res, 200, { status: "logged_out" });
   }
 
   if (req.method === "POST" && url.pathname === "/api/submissions/project-update") {
@@ -476,13 +581,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/decisions") {
     try {
-      const auth = requireAuth(req, res);
+      const auth = requireAdmin(req, res);
       if (!auth) {
         return;
-      }
-      const seed = loadSeed();
-      if (!isAdmin(req, seed)) {
-        return sendJson(res, 403, { error: "Admin access required" });
       }
       const payload = await parseBody(req);
       if (!payload.project || !payload.summary) {
@@ -540,13 +641,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/admin/actions") {
     try {
-      const auth = requireAuth(req, res);
+      const auth = requireAdmin(req, res);
       if (!auth) {
         return;
-      }
-      const seed = loadSeed();
-      if (!isAdmin(req, seed)) {
-        return sendJson(res, 403, { error: "Admin access required" });
       }
       const payload = await parseBody(req);
       if (!payload.action || !payload.target) {
@@ -566,13 +663,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/projects") {
     try {
-      const auth = requireAuth(req, res);
+      const auth = requireAdmin(req, res);
       if (!auth) {
         return;
-      }
-      const seed = loadSeed();
-      if (!isAdmin(req, seed)) {
-        return sendJson(res, 403, { error: "Admin access required" });
       }
       const payload = await parseBody(req);
       if (!payload.name || !payload.owner || !payload.tier) {
@@ -600,13 +693,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/tasks") {
     try {
-      const auth = requireAuth(req, res);
+      const auth = requireAdmin(req, res);
       if (!auth) {
         return;
-      }
-      const seed = loadSeed();
-      if (!isAdmin(req, seed)) {
-        return sendJson(res, 403, { error: "Admin access required" });
       }
       const payload = await parseBody(req);
       if (!payload.title || !payload.owner || !payload.project) {
@@ -666,13 +755,9 @@ const server = http.createServer(async (req, res) => {
 
   if (req.method === "POST" && url.pathname === "/api/users") {
     try {
-      const auth = requireAuth(req, res);
+      const auth = requireAdmin(req, res);
       if (!auth) {
         return;
-      }
-      const seed = loadSeed();
-      if (!isAdmin(req, seed)) {
-        return sendJson(res, 403, { error: "Admin access required" });
       }
       const payload = await parseBody(req);
       if (!payload.name || !payload.role) {

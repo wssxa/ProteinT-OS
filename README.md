@@ -56,19 +56,21 @@ sessionStorage.setItem("adminKey", "your-secret")
 
 ```bash
 GET  /api/config
-GET  /api/digest/daily
-GET  /api/submissions
-GET  /api/projects
-GET  /api/tasks
-GET  /api/users
+GET  /api/digest/daily (admin)
+GET  /api/submissions (admin)
+GET  /api/my/submissions
+GET  /api/projects (admin)
+GET  /api/tasks (admin)
+GET  /api/users (admin)
 GET  /api/me
-GET  /api/exceptions
-GET  /api/decisions
-GET  /api/compliance
+GET  /api/exceptions (admin)
+GET  /api/decisions (admin)
+GET  /api/compliance (admin)
 GET  /api/my/tasks
-GET  /api/finance
-GET  /api/finance/exceptions
+GET  /api/finance (admin)
+GET  /api/finance/exceptions (admin)
 POST /api/auth/wecom/mock
+POST /api/auth/logout
 POST /api/submissions/project-update
 POST /api/submissions/meeting-memo
 POST /api/admin/actions
@@ -121,9 +123,14 @@ curl -X POST http://localhost:3000/api/submissions/project-update \
 ## Next Steps (Phase 1 Build)
 
 1. Replace file-based storage with a database (Postgres + Prisma).
-2. Add authentication + RBAC (Reporter vs Admin).
-3. Implement WeCom OAuth + message callbacks.
+2. Implement WeCom OAuth + message callbacks.
+3. Add background jobs for daily digests + notifications.
 4. Add evidence-first validation and cadence rules.
+
+## Session + RBAC notes
+
+- Sessions expire after 12 hours by default. Override with `SESSION_TTL_HOURS`.
+- Admin-only endpoints require an Admin role (from `seed.json`) or the `ADMIN_KEY` header.
 
 ## Deployment handoff
 
