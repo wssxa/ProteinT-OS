@@ -1,5 +1,7 @@
 # ProteinT-OS (MVP Web Dashboard + WeCom Submission Stubs)
 
+Read in other languages: [简体中文](README.zh-CN.md)
+
 This repository contains a **starter MVP** for the "Electronic CEO Office" described in your architecture document. It is intentionally lightweight and focuses on:
 
 - **Web dashboard** (CEO pages, exceptions inbox, project registry)
@@ -139,6 +141,8 @@ See `DEPLOYMENT.md` for IT handoff details and production recommendations.
 ## Handoff guide (for final polish)
 
 See `HANDOFF.md` for a step-by-step guide on local usage, API surface, and production polish checklist.
+
+简体中文交接指南见：`HANDOFF.zh-CN.md`.
 
 ## Docker quick start
 

@@ -2,6 +2,8 @@
 
 This guide is the practical, step-by-step handoff for the teammate who will do final polish and production deployment. It assumes no prior context and calls out what works today, what is stubbed, and what must be finished for production.
 
+中文版请见：`HANDOFF.zh-CN.md`.
+
 ## 1) What is live today (MVP)
 
 **Working now:**
