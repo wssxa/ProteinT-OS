@@ -2,6 +2,7 @@ import fs from "fs";
 import http from "http";
 import path from "path";
 import { fileURLToPath } from "url";
+import { generate } from "./src/ai/provider.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -19,6 +20,8 @@ const decisionsPath = path.join(dataDir, "decisions.json");
 const auditPath = path.join(dataDir, "audit.json");
 const financePath = path.join(dataDir, "finance.json");
 const seedPath = path.join(dataDir, "seed.json");
+const chunksPath = path.join(dataDir, "chunks.json");
+const contextPackagesPath = path.join(dataDir, "context_packages.json");
 const publicDir = path.join(__dirname, "public");
 
 const ensureSubmissionsFile = () => {
@@ -56,6 +59,282 @@ const readSubmissions = () => {
 
 const writeSubmissions = (payload) => {
   fs.writeFileSync(submissionsPath, JSON.stringify(payload, null, 2));
+};
+
+const stopwords = new Set([
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "but",
+  "if",
+  "then",
+  "else",
+  "is",
+  "are",
+  "was",
+  "were",
+  "to",
+  "of",
+  "in",
+  "on",
+  "for",
+  "with",
+  "by",
+  "at",
+  "from",
+  "as",
+  "about",
+  "this",
+  "that",
+  "it",
+  "its",
+  "our",
+  "your",
+  "please",
+  "policy",
+  "procedure",
+  "项目",
+  "部门",
+  "流程",
+  "制度",
+  "规定",
+  "关于",
+  "如何",
+  "什么",
+  "哪个",
+  "哪些"
+]);
+
+const tokenizeQuery = (query) => {
+  if (!query) {
+    return [];
+  }
+  const matches = query.toLowerCase().match(/[a-z0-9\u4e00-\u9fa5]+/g) || [];
+  return matches.filter((term) => term && !stopwords.has(term));
+};
+
+const normalizeSpace = (value) => (value ? String(value).trim().toLowerCase() : "");
+
+const extractChunkTimestamp = (chunk) => {
+  const candidates = [
+    chunk.docTimestamp,
+    chunk.timestamp,
+    chunk.updatedAt,
+    chunk.createdAt,
+    chunk.date
+  ].filter(Boolean);
+  if (!candidates.length) {
+    return null;
+  }
+  const date = new Date(candidates[0]);
+  if (Number.isNaN(date.getTime())) {
+    return null;
+  }
+  return date;
+};
+
+const scoreChunk = (chunk, terms) => {
+  const haystack = `${chunk.text || ""} ${chunk.title || ""}`.toLowerCase();
+  const matchCount = terms.reduce((count, term) => (haystack.includes(term) ? count + 1 : count), 0);
+  const timestamp = extractChunkTimestamp(chunk);
+  let recencyScore = 0;
+  if (timestamp) {
+    const ageDays = daysBetween(timestamp, new Date());
+    recencyScore = Math.max(0, 30 - ageDays) / 30;
+  }
+  return matchCount * 2 + recencyScore;
+};
+
+const filterChunksByScope = (chunks, scope) => {
+  if (!scope?.spaceType) {
+    return chunks;
+  }
+  const scopeType = normalizeSpace(scope.spaceType);
+  const scopeName = normalizeSpace(scope.spaceName);
+  return chunks.filter((chunk) => {
+    const chunkType = normalizeSpace(chunk.spaceType || chunk.space?.type);
+    const chunkName = normalizeSpace(chunk.spaceName || chunk.space?.name);
+    if (scopeType && chunkType !== scopeType) {
+      return false;
+    }
+    if (scopeName && chunkName !== scopeName) {
+      return false;
+    }
+    return true;
+  });
+};
+
+const retrieveTopChunks = ({ question, scope, topK = 8 }) => {
+  const { chunks } = readJsonFile(chunksPath, { chunks: [] });
+  const scopedChunks = filterChunksByScope(chunks, scope);
+  const terms = tokenizeQuery(question);
+  const scored = scopedChunks
+    .map((chunk) => ({ chunk, score: scoreChunk(chunk, terms) }))
+    .filter(({ score }) => (terms.length ? score > 0 : true))
+    .sort((a, b) => b.score - a.score);
+  const seen = new Set();
+  const selected = [];
+  for (const entry of scored) {
+    const docId = entry.chunk.docId || entry.chunk.doc_id || entry.chunk.documentId;
+    if (docId && seen.has(docId)) {
+      continue;
+    }
+    if (docId) {
+      seen.add(docId);
+    }
+    selected.push(entry.chunk);
+    if (selected.length >= topK) {
+      break;
+    }
+  }
+  return selected;
+};
+
+const buildSources = (chunks) =>
+  chunks.map((chunk) => ({
+    docId: chunk.docId || chunk.doc_id || chunk.documentId || "unknown",
+    title: chunk.title || chunk.docTitle || "Untitled",
+    path: chunk.path || chunk.url || "",
+    spaceType: chunk.spaceType || chunk.space?.type || "unspecified",
+    spaceName: chunk.spaceName || chunk.space?.name || "",
+    excerpt: chunk.excerpt || chunk.text?.slice(0, 240) || "",
+    chunkId: chunk.chunkId || chunk.chunk_id || chunk.id || "chunk"
+  }));
+
+const persistContextPackage = ({ question, scope, sources }) => {
+  const data = readJsonFile(contextPackagesPath, { packages: [] });
+  const contextPackageId = `ctx_${Date.now()}`;
+  data.packages.unshift({
+    id: contextPackageId,
+    query: question,
+    scope,
+    docIds: sources.map((source) => source.docId),
+    chunkIds: sources.map((source) => source.chunkId),
+    createdAt: new Date().toISOString()
+  });
+  writeJsonFile(contextPackagesPath, data);
+  return contextPackageId;
+};
+
+const resolveScopeFromQuestion = ({ question, payloadScope, payloadProjectId, payloadProjectName }) => {
+  if (payloadScope?.spaceType) {
+    return payloadScope;
+  }
+  const { projects } = readJsonFile(projectsPath, { projects: [] });
+  if (payloadProjectId) {
+    const project = projects.find((item) => item.id === payloadProjectId);
+    if (project) {
+      return { spaceType: "project", spaceName: project.name, projectId: project.id };
+    }
+  }
+  if (payloadProjectName) {
+    const project = projects.find(
+      (item) => normalizeSpace(item.name) === normalizeSpace(payloadProjectName)
+    );
+    if (project) {
+      return { spaceType: "project", spaceName: project.name, projectId: project.id };
+    }
+  }
+  const questionText = normalizeSpace(question);
+  if (questionText) {
+    const projectMatch = projects.find(
+      (item) =>
+        questionText.includes(normalizeSpace(item.name)) ||
+        (item.id && questionText.includes(normalizeSpace(item.id)))
+    );
+    if (projectMatch) {
+      return { spaceType: "project", spaceName: projectMatch.name, projectId: projectMatch.id };
+    }
+  }
+  const seed = loadSeed();
+  const departmentMatch = seed.departments?.find((dept) =>
+    questionText.includes(normalizeSpace(dept))
+  );
+  if (departmentMatch) {
+    return { spaceType: "department", spaceName: departmentMatch };
+  }
+  const policyKeywords = [
+    "policy",
+    "procedure",
+    "handbook",
+    "hr",
+    "leave",
+    "vacation",
+    "reimbursement",
+    "travel",
+    "benefits",
+    "attendance",
+    "制度",
+    "流程",
+    "报销",
+    "考勤",
+    "人力",
+    "休假"
+  ];
+  if (policyKeywords.some((keyword) => questionText.includes(keyword))) {
+    return { spaceType: "policy", spaceName: "policy" };
+  }
+  return null;
+};
+
+const scopeCandidates = () => {
+  const seed = loadSeed();
+  const { projects } = readJsonFile(projectsPath, { projects: [] });
+  const projectCandidates = projects.slice(0, 4).map((project) => ({
+    spaceType: "project",
+    spaceName: project.name
+  }));
+  const departmentCandidates = (seed.departments || []).slice(0, 4).map((dept) => ({
+    spaceType: "department",
+    spaceName: dept
+  }));
+  return [...projectCandidates, ...departmentCandidates, { spaceType: "policy", spaceName: "policy" }];
+};
+
+const enforceScopeAccess = ({ scope, session }) => {
+  if (!session?.user) {
+    return false;
+  }
+  const seed = loadSeed();
+  if (session.user.role === "Admin" || seed.admins?.includes(session.user.name)) {
+    return true;
+  }
+  if (normalizeSpace(scope?.spaceType) === "person") {
+    return normalizeSpace(scope?.spaceName) === normalizeSpace(session.user.name);
+  }
+  const { projects } = readJsonFile(projectsPath, { projects: [] });
+  if (normalizeSpace(scope?.spaceType) === "project") {
+    return projects.some(
+      (project) =>
+        normalizeSpace(project.name) === normalizeSpace(scope.spaceName) &&
+        normalizeSpace(project.owner) === normalizeSpace(session.user.name)
+    );
+  }
+  if (normalizeSpace(scope?.spaceType) === "department") {
+    return projects.some(
+      (project) =>
+        normalizeSpace(project.department) === normalizeSpace(scope.spaceName) &&
+        normalizeSpace(project.owner) === normalizeSpace(session.user.name)
+    );
+  }
+  return false;
+};
+
+const buildContextPackage = ({ question, scope, topK }) => {
+  const chunks = retrieveTopChunks({ question, scope, topK });
+  const sourcesUsed = buildSources(chunks);
+  const contextPackageId = persistContextPackage({ question, scope, sources: sourcesUsed });
+  return {
+    sourcesUsed,
+    contextPackageId,
+    scopeUsed: scope,
+    assumptions: [
+      "Recency boost favors newer documents.",
+      "No explicit time window filter applied."
+    ]
+  };
 };
 
 const logAuditEvent = (event) => {
@@ -634,6 +913,203 @@ const server = http.createServer(async (req, res) => {
         project: payload.project
       });
       return sendJson(res, 200, { status: "created", entry });
+    } catch (error) {
+      return sendJson(res, 400, { error: "Invalid JSON payload" });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/copilot/query") {
+    try {
+      const auth = requireAuth(req, res);
+      if (!auth) {
+        return;
+      }
+      const payload = await parseBody(req);
+      if (!payload.question) {
+        return sendJson(res, 400, { error: "question is required" });
+      }
+      const scope = resolveScopeFromQuestion({
+        question: payload.question,
+        payloadScope: payload.scope,
+        payloadProjectId: payload.projectId,
+        payloadProjectName: payload.projectName
+      });
+      if (!scope) {
+        return sendJson(res, 200, {
+          needsClarification: true,
+          question: "Which project or department should I search?",
+          candidates: scopeCandidates()
+        });
+      }
+      if (!enforceScopeAccess({ scope, session: auth })) {
+        return sendJson(res, 403, { error: "Scope access denied for this role." });
+      }
+      const context = buildContextPackage({ question: payload.question, scope, topK: payload.topK || 8 });
+      const answer =
+        payload.mode === "retrieve_only"
+          ? `Retrieved ${context.sourcesUsed.length} sources for "${payload.question}".`
+          : `Retrieved ${context.sourcesUsed.length} sources. No AI synthesis configured yet.`;
+      return sendJson(res, 200, {
+        answer,
+        sourcesUsed: context.sourcesUsed,
+        contextPackageId: context.contextPackageId,
+        scopeUsed: context.scopeUsed,
+        assumptions: context.assumptions
+      });
+    } catch (error) {
+      return sendJson(res, 400, { error: "Invalid JSON payload" });
+    }
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/playbooks/run") {
+    try {
+      const auth = requireAdmin(req, res);
+      if (!auth) {
+        return;
+      }
+      const payload = await parseBody(req);
+      if (!payload.playbookId) {
+        return sendJson(res, 400, { error: "playbookId is required" });
+      }
+
+      if (payload.playbookId === "P2_POLICY_INTERPRETER") {
+        if (!payload.params?.question) {
+          return sendJson(res, 400, { error: "params.question is required" });
+        }
+        const scope = { spaceType: "policy", spaceName: "policy" };
+        const context = buildContextPackage({ question: payload.params.question, scope, topK: 8 });
+        const excerpts = context.sourcesUsed.map(
+          (source) => `${source.title}: ${source.excerpt}`
+        );
+        const nextActions = [
+          "Confirm the interpretation with HR or policy owner.",
+          "Check for recent updates or exceptions.",
+          "Document decision and communicate to stakeholders."
+        ];
+        const system = [
+          "PLAYBOOK:P2_POLICY_INTERPRETER",
+          "You are a policy interpreter. Use the provided excerpts and cite them."
+        ].join("\n");
+        const user = JSON.stringify({
+          question: payload.params.question,
+          excerpts,
+          nextActions
+        });
+        const response = await generate({ system, user, temperature: 0.2 });
+        return sendJson(res, 200, {
+          recommendation: response.text,
+          keyNumbers: {},
+          assumptions: context.assumptions,
+          sourcesUsed: context.sourcesUsed,
+          nextActions
+        });
+      }
+
+      if (payload.playbookId === "P3_PROJECT_HEALTH") {
+        if (!payload.params?.projectId) {
+          return sendJson(res, 400, { error: "params.projectId is required" });
+        }
+        const { projects } = readJsonFile(projectsPath, { projects: [] });
+        const project =
+          projects.find((item) => item.id === payload.params.projectId) ||
+          projects.find(
+            (item) =>
+              normalizeSpace(item.name) === normalizeSpace(payload.params.projectId)
+          );
+        if (!project) {
+          return sendJson(res, 404, { error: "Project not found" });
+        }
+        const { tasks } = readJsonFile(tasksPath, { tasks: [] });
+        const { decisions } = readJsonFile(decisionsPath, { decisions: [] });
+        const { submissions } = readSubmissions();
+        const exceptions = computeExceptions();
+        const updates = submissions
+          .filter((item) => item.type === "project_update" && item.project === project.name)
+          .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+        const latestUpdate = updates[0];
+        const missedCadence = exceptions.some(
+          (item) => item.project === project.name && item.type === "missed_cadence"
+        );
+        const blockedTasks = tasks.filter(
+          (task) => task.project === project.name && task.status === "Blocked"
+        );
+        const blockerNote = latestUpdate?.blockers && latestUpdate.blockers !== "None";
+        const blockersCount = blockedTasks.length + (blockerNote ? 1 : 0);
+        const nextDueDate = latestUpdate?.nextDueDate ? new Date(latestUpdate.nextDueDate) : null;
+        const overdueMilestones =
+          nextDueDate && !Number.isNaN(nextDueDate.getTime()) && nextDueDate < new Date();
+        const decisionNeeded =
+          latestUpdate?.decisionNeeded?.toLowerCase() === "y" ||
+          decisions.some((item) => item.project === project.name);
+        const lastUpdate = latestUpdate?.createdAt || null;
+        const lastUpdateDaysAgo = lastUpdate ? daysBetween(new Date(lastUpdate), new Date()) : null;
+        let health = "green";
+        if (missedCadence || overdueMilestones || blockersCount > 0) {
+          health = "red";
+        } else if (decisionNeeded) {
+          health = "yellow";
+        }
+        const nextActions = [];
+        if (missedCadence) {
+          nextActions.push("Request the latest project update from the owner.");
+        }
+        if (blockersCount > 0) {
+          nextActions.push("Review blockers and assign owners to unblock items.");
+        }
+        if (overdueMilestones) {
+          nextActions.push("Re-baseline the next milestone due date.");
+        }
+        if (decisionNeeded) {
+          nextActions.push("Schedule decision review with stakeholders.");
+        }
+        while (nextActions.length < 3) {
+          nextActions.push("Confirm progress and update the project tracker.");
+        }
+        const scope = { spaceType: "project", spaceName: project.name, projectId: project.id };
+        const context = buildContextPackage({
+          question: `Project health for ${project.name}`,
+          scope,
+          topK: 8
+        });
+        const system = [
+          "PLAYBOOK:P3_PROJECT_HEALTH",
+          "Summarize project health using provided metrics and evidence. Cite sources."
+        ].join("\n");
+        const user = JSON.stringify({
+          project: { id: project.id, name: project.name },
+          metrics: {
+            health,
+            lastUpdate,
+            lastUpdateDaysAgo,
+            missedCadence,
+            blockersCount,
+            overdueMilestones,
+            decisionNeeded
+          },
+          evidence: context.sourcesUsed.map(
+            (source) => `${source.title}: ${source.excerpt}`
+          ),
+          nextActions
+        });
+        const response = await generate({ system, user, temperature: 0.2 });
+        return sendJson(res, 200, {
+          recommendation: response.text,
+          keyNumbers: {
+            health,
+            lastUpdate,
+            lastUpdateDaysAgo,
+            missedCadence,
+            blockersCount,
+            overdueMilestones,
+            decisionNeeded
+          },
+          assumptions: context.assumptions,
+          sourcesUsed: context.sourcesUsed,
+          nextActions
+        });
+      }
+
+      return sendJson(res, 400, { error: "Unknown playbookId" });
     } catch (error) {
       return sendJson(res, 400, { error: "Invalid JSON payload" });
     }
