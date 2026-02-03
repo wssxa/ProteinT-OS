@@ -1,0 +1,29 @@
+version: "3.9"
+
+services:
+  proteint-os:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - ADMIN_KEY=${ADMIN_KEY:-}
+      - SESSION_TTL_HOURS=${SESSION_TTL_HOURS:-12}
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - postgres
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=proteint
+      - POSTGRES_PASSWORD=proteint
+      - POSTGRES_DB=proteint_os
+    ports:
+      - "5432:5432"
+    volumes:
+      - proteint_os_db:/var/lib/postgresql/data
+
+volumes:
+  proteint_os_db:

@@ -1,0 +1,54 @@
+{
+  "organization": {
+    "name": "ProteinT-OS"
+  },
+  "admin": {
+    "name": "Hongyu Kang",
+    "nameZh": "康弘宇",
+    "role": "Admin"
+  },
+  "admins": [
+    "Hongyu Kang",
+    "Jin Chuan",
+    "Jie Li"
+  ],
+  "departments": [
+    "总经办",
+    "战略商务部",
+    "销售部",
+    "市场部",
+    "研发转化部",
+    "生产运营部",
+    "财务管理部",
+    "人力行政部",
+    "科研服务业务",
+    "D2C组"
+  ],
+  "pilotDepartments": [
+    "财务管理部",
+    "市场部",
+    "D2C组"
+  ],
+  "integrations": {
+    "wecom": {
+      "enabled": true,
+      "scope": [
+        "submissions",
+        "notifications",
+        "admin_actions",
+        "daily_digest"
+      ],
+      "login": "wecom_oauth_stub"
+    },
+    "documents": true,
+    "chat": true,
+    "files": true,
+    "spreadsheets": true
+  },
+  "tiers": {
+    "T0": { "cadenceDays": 1 },
+    "T1": { "cadenceDays": 3 },
+    "T2": { "cadenceDays": 7 },
+    "T3": { "cadenceDays": 14 }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "name": "proteint-os",
+  "version": "0.1.0",
+  "description": "MVP web dashboard + WeCom submission stubs for Electronic CEO Office",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "dev": "node server.js",
+    "seed:sql": "node scripts/seed_to_sql.js > db/seed.sql"
+  },
+  "dependencies": {}
+}

@@ -1,0 +1,467 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ProteinT-OS MVP Dashboard</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="hero">
+      <div>
+        <p class="tag">Electronic CEO Office • MVP</p>
+        <h1>ProteinT-OS</h1>
+        <p class="subtitle">
+          Web dashboard + WeCom submission stubs for CEO visibility, project updates,
+          and exception tracking.
+        </p>
+      </div>
+      <div class="meta">
+        <div class="meta-card">
+          <h3>Admin</h3>
+          <p id="adminName">—</p>
+        </div>
+        <div class="meta-card">
+          <h3>WeCom Scope</h3>
+          <p id="wecomScope">—</p>
+        </div>
+        <div class="meta-card">
+          <h3>Interface Mode</h3>
+          <p id="interfaceMode">Reporter</p>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="grid">
+        <div class="card">
+          <h2>CEO Level 0 Pages</h2>
+          <ul>
+            <li>Cash / Runway</li>
+            <li>Net Revenue & Pipeline</li>
+            <li>Projects & Milestones</li>
+            <li>Operations Health</li>
+            <li>Risks / Decisions Needed</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>Exceptions Inbox</h2>
+          <ul>
+            <li>Missed updates by tier</li>
+            <li>Overdue milestones</li>
+            <li>Blocker spikes</li>
+            <li>Finance exceptions</li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>Decisions Queue</h2>
+          <ul>
+            <li>Decision-needed items</li>
+            <li>Recommended next actions</li>
+            <li>Evidence-first drill-down</li>
+          </ul>
+        </div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Departments (All in System)</h2>
+          <p>Phase 1 pilots are highlighted.</p>
+        </div>
+        <div id="departments" class="pill-list"></div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Daily Digest (Today)</h2>
+          <p>Auto-generated summary for CEO review.</p>
+        </div>
+        <div class="digest">
+          <div class="digest-item">
+            <span class="label">Submissions</span>
+            <strong id="digestTotal">0</strong>
+          </div>
+          <div class="digest-item">
+            <span class="label">Project Updates</span>
+            <strong id="digestUpdates">0</strong>
+          </div>
+          <div class="digest-item">
+            <span class="label">Meeting Memos</span>
+            <strong id="digestMemos">0</strong>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Exceptions Inbox (Admin)</h2>
+          <p>Projects that missed cadence or lack updates.</p>
+        </div>
+        <div id="exceptionsList" class="list"></div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Decisions Queue (Admin)</h2>
+          <p>Items flagged as decision-needed.</p>
+        </div>
+        <div id="decisionsList" class="list"></div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Compliance Metrics (Admin)</h2>
+          <p>Submission compliance rate by department.</p>
+        </div>
+        <div id="complianceList" class="list"></div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Finance Exceptions (Admin)</h2>
+          <p>Finance items flagged with exception reasons.</p>
+        </div>
+        <div id="financeExceptionsList" class="list"></div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Audit Log (Admin)</h2>
+          <p>Recent admin and submission actions.</p>
+        </div>
+        <div id="auditList" class="list"></div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Submission Stubs (WeCom → API)</h2>
+          <p>Use these endpoints to connect WeCom submissions.</p>
+        </div>
+        <div class="code">
+          <code>POST /api/auth/wecom/mock</code>
+          <code>POST /api/submissions/project-update</code>
+          <code>POST /api/submissions/meeting-memo</code>
+          <code>POST /api/admin/actions</code>
+          <code>GET /api/digest/daily</code>
+          <code>GET /api/submissions</code>
+          <code>GET /api/projects</code>
+          <code>GET /api/tasks</code>
+          <code>GET /api/users</code>
+          <code>GET /api/decisions</code>
+          <code>GET /api/compliance</code>
+          <code>GET /api/finance</code>
+          <code>GET /api/finance/exceptions</code>
+          <code>GET /api/audit</code>
+          <code>GET /api/my/submissions</code>
+          <code>POST /api/projects (admin)</code>
+          <code>POST /api/tasks (admin)</code>
+          <code>POST /api/users (admin)</code>
+          <code>POST /api/decisions (admin)</code>
+          <code>POST /api/finance</code>
+          <code>POST /api/auth/logout</code>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>WeCom Login (Stub)</h2>
+          <p>Simulates WeCom OAuth for now. Use your name to log in.</p>
+        </div>
+        <form id="loginForm" class="form-grid">
+          <label>
+            Name
+            <input name="name" placeholder="Hongyu Kang / Jin Chuan / Jie Li" required />
+          </label>
+          <button type="submit">Login</button>
+        </form>
+        <div class="inline-actions">
+          <div id="loginStatus" class="status-pill">Not logged in</div>
+          <button id="logoutButton" class="secondary-button hidden" type="button">
+            Logout
+          </button>
+        </div>
+        <div id="sessionExpiry" class="status-hint"></div>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Project Registry (Admin)</h2>
+          <p>Create projects that map to the CEO pages and task ledger.</p>
+        </div>
+        <form id="projectRegistryForm" class="form-grid">
+          <label>
+            Project Name
+            <input name="name" placeholder="D2C Growth Push" required />
+          </label>
+          <label>
+            Owner
+            <input name="owner" placeholder="康弘宇" required />
+          </label>
+          <label>
+            Tier
+            <select name="tier">
+              <option value="T0">T0</option>
+              <option value="T1">T1</option>
+              <option value="T2" selected>T2</option>
+              <option value="T3">T3</option>
+            </select>
+          </label>
+          <label>
+            Department
+            <input name="department" placeholder="市场部 / D2C组" />
+          </label>
+          <label class="full">
+            Current Milestone
+            <input name="milestone" placeholder="Launch new ad set..." />
+          </label>
+          <button type="submit">Create Project</button>
+        </form>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Task Ledger (Admin)</h2>
+          <p>Create tasks linked to projects for workload observability.</p>
+        </div>
+        <form id="taskForm" class="form-grid">
+          <label>
+            Task Title
+            <input name="title" placeholder="Prepare weekly D2C report" required />
+          </label>
+          <label>
+            Owner
+            <input name="owner" placeholder="康弘宇" required />
+          </label>
+          <label>
+            Project
+            <input name="project" placeholder="D2C Growth Push" required />
+          </label>
+          <label>
+            Status
+            <select name="status">
+              <option value="Backlog">Backlog</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Blocked">Blocked</option>
+              <option value="Done">Done</option>
+            </select>
+          </label>
+          <label>
+            Evidence Link
+            <input name="evidenceLink" placeholder="https://..." />
+          </label>
+          <button type="submit">Create Task</button>
+        </form>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Latest Projects & Tasks (Preview)</h2>
+          <p>Shows the most recent projects and tasks stored by the backend.</p>
+        </div>
+        <div class="list">
+          <div>
+            <h3 class="list-title">Projects</h3>
+            <div id="projectsList" class="list"></div>
+          </div>
+          <div>
+            <h3 class="list-title">Tasks</h3>
+            <div id="tasksList" class="list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel reporter-only" data-role="reporter">
+        <div>
+          <h2>My Due Items (Reporter)</h2>
+          <p>Shows your latest submissions and upcoming updates.</p>
+        </div>
+        <div id="myDueItems" class="list"></div>
+      </section>
+
+      <section class="panel reporter-only" data-role="reporter">
+        <div>
+          <h2>My Tasks (Reporter)</h2>
+          <p>Update task status with evidence links.</p>
+        </div>
+        <div id="myTasksList" class="list"></div>
+        <form id="taskUpdateForm" class="form-grid">
+          <label>
+            Task ID
+            <input name="id" placeholder="task_123" required />
+          </label>
+          <label>
+            Status
+            <select name="status">
+              <option value="Backlog">Backlog</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Blocked">Blocked</option>
+              <option value="Done">Done</option>
+            </select>
+          </label>
+          <label class="full">
+            Evidence Link
+            <input name="evidenceLink" placeholder="https://..." />
+          </label>
+          <button type="submit">Update Task</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>Try It: Project Update</h2>
+          <p>Submit a project update and see it appear in the preview list.</p>
+        </div>
+        <form id="projectForm" class="form-grid">
+          <label>
+            Project
+            <input name="project" placeholder="D2C Growth Push" required />
+          </label>
+          <label>
+            Owner
+            <input name="owner" placeholder="康弘宇" required />
+          </label>
+          <label>
+            Tier
+            <select name="tier">
+              <option value="T0">T0</option>
+              <option value="T1">T1</option>
+              <option value="T2" selected>T2</option>
+              <option value="T3">T3</option>
+            </select>
+          </label>
+          <label>
+            Current Milestone
+            <input name="currentMilestone" placeholder="Milestone in progress" required />
+          </label>
+          <label>
+            Progress (%)
+            <input name="progress" placeholder="60%" required />
+          </label>
+          <label>
+            Evidence Link
+            <input name="evidenceLink" placeholder="https://..." required />
+          </label>
+          <label>
+            Next Milestone
+            <input name="nextMilestone" placeholder="Next milestone" required />
+          </label>
+          <label>
+            Next Due Date
+            <input name="nextDueDate" placeholder="2026-02-01" required />
+          </label>
+          <label class="full">
+            Blockers
+            <input name="blockers" placeholder="None / waiting on..." />
+          </label>
+          <label>
+            Decision Needed (Y/N)
+            <input name="decisionNeeded" placeholder="N" />
+          </label>
+          <label class="full">
+            Decision Summary
+            <input name="decisionSummary" placeholder="Need approval for budget..." />
+          </label>
+          <label>
+            Cost This Period
+            <input name="cost" placeholder="RMB 20,000" />
+          </label>
+          <label>
+            Expected Value
+            <input name="expectedValue" placeholder="RMB 100,000" />
+          </label>
+          <button type="submit">Submit Update</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>Try It: Meeting Memo</h2>
+          <p>Upload a memo context; the API returns a stored record.</p>
+        </div>
+        <form id="memoForm" class="form-grid">
+          <label>
+            Owner
+            <input name="owner" placeholder="康弘宇" required />
+          </label>
+          <label>
+            Project
+            <input name="project" placeholder="D2C Growth Push" />
+          </label>
+          <label class="full">
+            Context
+            <input name="context" placeholder="Weekly ops sync — key decisions..." required />
+          </label>
+          <label class="full">
+            Decisions Made
+            <input name="decisions" placeholder="Approved budget, Escalate vendor..." />
+          </label>
+          <label class="full">
+            Action Items (comma-separated)
+            <input name="actions" placeholder="Clarify budget, Send brief..." />
+          </label>
+          <label class="full">
+            Risks / Open Questions
+            <input name="risks" placeholder="Vendor delay, missing data..." />
+          </label>
+          <label class="full">
+            Follow-ups
+            <input name="followUps" placeholder="Schedule review, Request report..." />
+          </label>
+          <button type="submit">Submit Memo</button>
+        </form>
+      </section>
+
+      <section class="panel">
+        <div>
+          <h2>Finance Item (Starter)</h2>
+          <p>Submit a finance document with classification and exceptions.</p>
+        </div>
+        <form id="financeForm" class="form-grid">
+          <label>
+            Doc Type
+            <input name="docType" placeholder="invoice / reimbursement / bank" required />
+          </label>
+          <label>
+            Date
+            <input name="date" placeholder="2026-02-01" required />
+          </label>
+          <label>
+            Amount
+            <input name="amount" placeholder="RMB 1,200" required />
+          </label>
+          <label>
+            Vendor / Payee
+            <input name="vendor" placeholder="Supplier A" required />
+          </label>
+          <label>
+            Category
+            <input name="category" placeholder="Logistics / Marketing" />
+          </label>
+          <label>
+            Project / Department
+            <input name="project" placeholder="D2C Growth Push" />
+          </label>
+          <label class="full">
+            Exception Reason (optional)
+            <input name="exceptionReason" placeholder="Missing receipt / out of policy" />
+          </label>
+          <button type="submit">Submit Finance Item</button>
+        </form>
+      </section>
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Latest Submissions (Preview)</h2>
+          <p>Shows the most recent submissions received by the backend.</p>
+        </div>
+        <div id="submissionsList" class="list"></div>
+      </section>
+    </main>
+
+    <footer>
+      <p>ProteinT-OS MVP • Evidence-first • Role-based views</p>
+    </footer>
+
+    <script src="/app.js"></script>
+  </body>
+</html>
