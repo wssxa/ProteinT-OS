@@ -1,3 +1,14 @@
 {
-  "chunks": []
+  "chunks": [
+    {
+      "chunkId": "doc_6f85bf30d5263d7f_c1",
+      "docId": "doc_6f85bf30d5263d7f",
+      "title": "Leave & Attendance Handbook",
+      "path": "work_artifacts/policy/policy/2026-W06/handbook/leave.md",
+      "spaceType": "policy",
+      "spaceName": "policy",
+      "text": "# Leave & Attendance Handbook\n\nEmployees and long-term contractors accrue paid leave monthly based on contract terms and local policy.\n\n## Annual Leave\n\n- Full-time employees receive 15 days of annual leave each calendar year.\n- Leave requests must be submitted at least 3 business days in advance in WeCom.\n- Managers should approve or reject requests within 1 business day.\n\n## Sick Leave\n\n- Up to 10 paid sick leave days are available each year.\n- A medical note is required for absences longer than 2 consecutive days.\n\n## Carry-over\n\n- Up to 5 unused annual leave days can be carried into Q1 of the following year.\n- Remaining unused days after March 31 are forfeited unless an approved exception exists.\n\n## Evidence and audit\n\nHR exports approved leave records every Friday and stores them under policy artifacts.\nDepartment heads review exceptions weekly.",
+      "timestamp": "2026-02-11T04:36:22.428Z"
+    }
+  ]
 }

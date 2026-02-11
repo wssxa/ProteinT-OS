@@ -1,6 +1,7 @@
 import fs from "fs";
 import http from "http";
 import path from "path";
+import crypto from "crypto";
 import { fileURLToPath } from "url";
 import { generate } from "./src/ai/provider.js";
 
@@ -22,7 +23,12 @@ const financePath = path.join(dataDir, "finance.json");
 const seedPath = path.join(dataDir, "seed.json");
 const chunksPath = path.join(dataDir, "chunks.json");
 const contextPackagesPath = path.join(dataDir, "context_packages.json");
+const workArtifactsPath = path.join(dataDir, "work_artifacts");
+const ingestStatePath = path.join(dataDir, "ingest_state.json");
 const publicDir = path.join(__dirname, "public");
+const allowedIngestionExts = new Set([".txt", ".md", ".json", ".csv"]);
+const CHUNK_MIN_CHARS = 800;
+const CHUNK_MAX_CHARS = 1200;
 
 const ensureSubmissionsFile = () => {
   if (!fs.existsSync(submissionsPath)) {
@@ -49,6 +55,199 @@ const readJsonFile = (filePath, fallback) => {
 
 const writeJsonFile = (filePath, payload) => {
   fs.writeFileSync(filePath, JSON.stringify(payload, null, 2));
+};
+
+const ensureWorkArtifactsDir = () => {
+  fs.mkdirSync(workArtifactsPath, { recursive: true });
+};
+
+const ensureIngestionFiles = () => {
+  ensureWorkArtifactsDir();
+  ensureFile(chunksPath, { chunks: [] });
+  ensureFile(ingestStatePath, { files: {}, lastScan: null });
+};
+
+const getDocIdForPath = (relativePath) => {
+  const digest = crypto.createHash("sha1").update(relativePath).digest("hex");
+  return `doc_${digest.slice(0, 16)}`;
+};
+
+const walkDirectory = (directoryPath) => {
+  const entries = fs.readdirSync(directoryPath, { withFileTypes: true });
+  const files = [];
+  for (const entry of entries) {
+    const fullPath = path.join(directoryPath, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...walkDirectory(fullPath));
+      continue;
+    }
+    files.push(fullPath);
+  }
+  return files;
+};
+
+const chunkText = (input) => {
+  const normalized = String(input || "").replace(/\r\n/g, "\n").trim();
+  if (!normalized) {
+    return [];
+  }
+  const paragraphs = normalized.split(/\n\s*\n/).map((part) => part.trim()).filter(Boolean);
+  const chunks = [];
+  let current = "";
+  const pushCurrent = () => {
+    if (current.trim()) {
+      chunks.push(current.trim());
+    }
+    current = "";
+  };
+
+  for (const paragraph of paragraphs) {
+    if (paragraph.length > CHUNK_MAX_CHARS) {
+      pushCurrent();
+      for (let index = 0; index < paragraph.length; index += CHUNK_MAX_CHARS) {
+        chunks.push(paragraph.slice(index, index + CHUNK_MAX_CHARS).trim());
+      }
+      continue;
+    }
+    const candidate = current ? `${current}\n\n${paragraph}` : paragraph;
+    if (candidate.length > CHUNK_MAX_CHARS && current.length >= CHUNK_MIN_CHARS) {
+      pushCurrent();
+      current = paragraph;
+      continue;
+    }
+    if (candidate.length > CHUNK_MAX_CHARS && current.length < CHUNK_MIN_CHARS) {
+      pushCurrent();
+      current = paragraph;
+      continue;
+    }
+    current = candidate;
+  }
+
+  pushCurrent();
+
+  if (chunks.length > 1) {
+    const lastChunk = chunks[chunks.length - 1];
+    const prevChunk = chunks[chunks.length - 2];
+    if (lastChunk.length < CHUNK_MIN_CHARS && prevChunk.length + 2 + lastChunk.length <= CHUNK_MAX_CHARS) {
+      chunks[chunks.length - 2] = `${prevChunk}\n\n${lastChunk}`;
+      chunks.pop();
+    }
+  }
+
+  return chunks;
+};
+
+const extractMarkdownTitle = (text, fallback) => {
+  const headingMatch = text.match(/^#\s+(.+)$/m);
+  if (headingMatch?.[1]) {
+    return headingMatch[1].trim();
+  }
+  return fallback;
+};
+
+const runIngestionScan = () => {
+  ensureIngestionFiles();
+  const startedAt = new Date().toISOString();
+  const state = readJsonFile(ingestStatePath, { files: {}, lastScan: null });
+  const previousFiles = state.files || {};
+  const currentFiles = {};
+  const errors = [];
+
+  const candidateFiles = walkDirectory(workArtifactsPath)
+    .filter((filePath) => allowedIngestionExts.has(path.extname(filePath).toLowerCase()))
+    .sort((a, b) => a.localeCompare(b));
+
+  const changedFiles = [];
+  let newDocs = 0;
+  let updatedDocs = 0;
+
+  for (const absolutePath of candidateFiles) {
+    const relativePath = path.relative(dataDir, absolutePath).split(path.sep).join("/");
+    const stats = fs.statSync(absolutePath);
+    const docId = getDocIdForPath(relativePath);
+    const metadata = {
+      docId,
+      mtimeMs: stats.mtimeMs,
+      size: stats.size,
+      timestamp: stats.mtime.toISOString()
+    };
+    currentFiles[relativePath] = metadata;
+    const previous = previousFiles[relativePath];
+    const hasChanged = !previous || previous.mtimeMs !== metadata.mtimeMs || previous.size !== metadata.size;
+    if (hasChanged) {
+      changedFiles.push({ absolutePath, relativePath, metadata, isNew: !previous });
+      if (!previous) {
+        newDocs += 1;
+      } else {
+        updatedDocs += 1;
+      }
+    }
+  }
+
+  const deletedDocIds = Object.entries(previousFiles)
+    .filter(([relativePath]) => !currentFiles[relativePath])
+    .map(([, fileInfo]) => fileInfo.docId)
+    .filter(Boolean);
+
+  const { chunks: existingChunks } = readJsonFile(chunksPath, { chunks: [] });
+  const changedDocIds = new Set(changedFiles.map((item) => item.metadata.docId));
+  const removedDocIds = new Set(deletedDocIds);
+  const retainedChunks = existingChunks.filter(
+    (chunk) => !changedDocIds.has(chunk.docId) && !removedDocIds.has(chunk.docId)
+  );
+  const newChunks = [];
+
+  for (const file of changedFiles) {
+    try {
+      const text = fs.readFileSync(file.absolutePath, "utf-8");
+      const parsed = path.normalize(file.relativePath).split(path.sep);
+      const [artifactRoot, spaceType = "unknown", spaceName = "unknown"] = parsed;
+      if (artifactRoot !== "work_artifacts") {
+        continue;
+      }
+      const filename = path.basename(file.relativePath);
+      const fallbackTitle = filename;
+      const title = path.extname(filename).toLowerCase() === ".md" ? extractMarkdownTitle(text, fallbackTitle) : fallbackTitle;
+      const chunks = chunkText(text);
+      chunks.forEach((chunkTextValue, index) => {
+        newChunks.push({
+          chunkId: `${file.metadata.docId}_c${index + 1}`,
+          docId: file.metadata.docId,
+          title,
+          path: file.relativePath,
+          spaceType,
+          spaceName,
+          text: chunkTextValue,
+          timestamp: file.metadata.timestamp
+        });
+      });
+    } catch (error) {
+      errors.push({ file: file.relativePath, message: error.message });
+    }
+  }
+
+  const chunks = [...retainedChunks, ...newChunks];
+  writeJsonFile(chunksPath, { chunks });
+
+  const result = {
+    scannedFiles: candidateFiles.length,
+    newDocs,
+    updatedDocs,
+    deletedDocs: deletedDocIds.length,
+    changedDocs: changedFiles.length,
+    chunksAdded: newChunks.length,
+    chunkCount: chunks.length,
+    errors,
+    startedAt,
+    finishedAt: new Date().toISOString()
+  };
+
+  writeJsonFile(ingestStatePath, {
+    files: currentFiles,
+    lastScan: result
+  });
+
+  return result;
 };
 
 const readSubmissions = () => {
@@ -687,6 +886,35 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, { events });
   }
 
+  if (req.method === "GET" && url.pathname === "/api/admin/ingest/status") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
+    ensureIngestionFiles();
+    const state = readJsonFile(ingestStatePath, { files: {}, lastScan: null });
+    const { chunks } = readJsonFile(chunksPath, { chunks: [] });
+    return sendJson(res, 200, {
+      chunkCount: chunks.length,
+      trackedFiles: Object.keys(state.files || {}).length,
+      lastScan: state.lastScan || null
+    });
+  }
+
+  if (req.method === "POST" && url.pathname === "/api/admin/ingest/scan") {
+    const adminSession = requireAdmin(req, res);
+    if (!adminSession) {
+      return;
+    }
+    const result = runIngestionScan();
+    logAuditEvent({
+      type: "ingestion_scan",
+      actor: adminSession.user?.name,
+      target: `new=${result.newDocs}, updated=${result.updatedDocs}, chunks=${result.chunkCount}`
+    });
+    return sendJson(res, 200, result);
+  }
+
   if (req.method === "POST" && url.pathname === "/api/auth/wecom/mock") {
     try {
       const payload = await parseBody(req);
@@ -1269,6 +1497,8 @@ const server = http.createServer(async (req, res) => {
   res.writeHead(404);
   res.end("Not found");
 });
+
+ensureIngestionFiles();
 
 server.listen(port, () => {
   console.log(`ProteinT-OS MVP running at http://localhost:${port}`);

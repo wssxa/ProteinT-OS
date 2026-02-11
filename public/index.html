@@ -132,6 +132,18 @@
         <div id="auditList" class="list"></div>
       </section>
 
+
+      <section class="panel admin-only" data-role="admin">
+        <div>
+          <h2>Ingestion (Admin)</h2>
+          <p>Scan <code>data/work_artifacts</code> and update retrieval chunks.</p>
+        </div>
+        <div class="inline-actions">
+          <button id="ingestRunButton" type="button">Run scan</button>
+          <div id="ingestStatus" class="status-pill">Last scan: never</div>
+        </div>
+        <div id="ingestStats" class="list"></div>
+      </section>
       <section class="panel admin-only" data-role="admin">
         <div>
           <h2>Copilot (Admin)</h2>
@@ -243,6 +255,8 @@
           <code>GET /api/audit</code>
           <code>POST /api/copilot/query</code>
           <code>POST /api/playbooks/run</code>
+          <code>GET /api/admin/ingest/status</code>
+          <code>POST /api/admin/ingest/scan</code>
           <code>GET /api/my/submissions</code>
           <code>POST /api/projects (admin)</code>
           <code>POST /api/tasks (admin)</code>

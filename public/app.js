@@ -41,12 +41,18 @@ const loadFinanceExceptions = async () => apiGet("/api/finance/exceptions");
 
 const loadAudit = async () => apiGet("/api/audit");
 
+const loadIngestStatus = async () => apiGet("/api/admin/ingest/status");
+
 const runCopilotQuery = async (payload) => {
   return submitJson("/api/copilot/query", payload);
 };
 
 const runPlaybook = async (payload) => {
   return submitJson("/api/playbooks/run", payload);
+};
+
+const runIngestScan = async () => {
+  return submitJson("/api/admin/ingest/scan", {});
 };
 
 const submitJson = async (url, payload) => {
@@ -347,6 +353,37 @@ const renderAudit = (items) => {
   });
 };
 
+const renderIngestionStatus = (status) => {
+  const statusContainer = document.getElementById("ingestStatus");
+  const statsContainer = document.getElementById("ingestStats");
+  if (!statusContainer || !statsContainer) {
+    return;
+  }
+  const lastScan = status?.lastScan;
+  const statusLine = lastScan
+    ? `Last scan: ${new Date(lastScan.finishedAt || lastScan.startedAt).toLocaleString()}`
+    : "Last scan: never";
+  statusContainer.textContent = statusLine;
+
+  const details = [
+    `Total chunks: ${status?.chunkCount ?? 0}`,
+    `Tracked files: ${status?.trackedFiles ?? 0}`,
+    `New docs: ${lastScan?.newDocs ?? 0}`,
+    `Updated docs: ${lastScan?.updatedDocs ?? 0}`,
+    `Deleted docs: ${lastScan?.deletedDocs ?? 0}`,
+    `Errors: ${lastScan?.errors?.length || 0}`
+  ];
+  statsContainer.innerHTML = "";
+  details.forEach((line) => {
+    const item = document.createElement("div");
+    item.className = "list-item";
+    const textNode = document.createElement("p");
+    textNode.textContent = line;
+    item.appendChild(textNode);
+    statsContainer.appendChild(item);
+  });
+};
+
 const renderFinanceExceptions = (items) => {
   const list = document.getElementById("financeExceptionsList");
   if (!list) {
@@ -386,7 +423,8 @@ const render = async () => {
     compliance,
     financeExceptions,
     audit,
-    myTasks
+    myTasks,
+    ingestStatus
   ] = await Promise.all([
     isAdmin ? loadDigest() : Promise.resolve({ totals: { submissions: 0, projectUpdates: 0, meetingMemos: 0 } }),
     isAdmin ? loadSubmissions() : Promise.resolve({ submissions: [] }),
@@ -398,7 +436,8 @@ const render = async () => {
     isAdmin ? loadCompliance() : Promise.resolve({ compliance: [] }),
     isAdmin ? loadFinanceExceptions() : Promise.resolve({ exceptions: [] }),
     isAdmin ? loadAudit() : Promise.resolve({ events: [] }),
-    loadMyTasks()
+    loadMyTasks(),
+    isAdmin ? loadIngestStatus() : Promise.resolve({ chunkCount: 0, trackedFiles: 0, lastScan: null })
   ]);
 
   const adminName = document.getElementById("adminName");
@@ -434,6 +473,7 @@ const render = async () => {
   renderFinanceExceptions(financeExceptions.exceptions || []);
   renderAudit(audit.events || []);
   renderMyTasks(myTasks.tasks || []);
+  renderIngestionStatus(ingestStatus || { chunkCount: 0, trackedFiles: 0, lastScan: null });
 
   const projectForm = document.getElementById("projectForm");
   const memoForm = document.getElementById("memoForm");
@@ -460,6 +500,8 @@ const render = async () => {
   const playbookProjectActions = document.getElementById("playbookProjectActions");
   const playbookProjectNumbers = document.getElementById("playbookProjectNumbers");
   const playbookProjectSelect = document.getElementById("playbookProjectSelect");
+  const ingestRunButton = document.getElementById("ingestRunButton");
+  const ingestStatusText = document.getElementById("ingestStatus");
 
   const updateLoginStatus = () => {
     const userName = sessionStorage.getItem("sessionUser");
@@ -649,6 +691,32 @@ const render = async () => {
         li.textContent = action;
         playbookProjectActions.appendChild(li);
       });
+    });
+  }
+
+  if (ingestRunButton) {
+    ingestRunButton.addEventListener("click", async () => {
+      ingestRunButton.disabled = true;
+      const originalLabel = ingestRunButton.textContent;
+      ingestRunButton.textContent = "Running...";
+      try {
+        const result = await runIngestScan();
+        renderIngestionStatus({
+          chunkCount: result.chunkCount,
+          trackedFiles: result.scannedFiles,
+          lastScan: result
+        });
+        if (ingestStatusText) {
+          ingestStatusText.textContent = `Last scan: ${new Date(result.finishedAt).toLocaleString()}`;
+        }
+      } catch (error) {
+        if (ingestStatusText) {
+          ingestStatusText.textContent = `Scan failed: ${error.message}`;
+        }
+      } finally {
+        ingestRunButton.disabled = false;
+        ingestRunButton.textContent = originalLabel;
+      }
     });
   }
 

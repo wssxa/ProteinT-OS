@@ -1,0 +1,22 @@
+{
+  "files": {
+    "work_artifacts/policy/policy/2026-W06/handbook/leave.md": {
+      "docId": "doc_6f85bf30d5263d7f",
+      "mtimeMs": 1770784582428.2056,
+      "size": 864,
+      "timestamp": "2026-02-11T04:36:22.428Z"
+    }
+  },
+  "lastScan": {
+    "scannedFiles": 1,
+    "newDocs": 0,
+    "updatedDocs": 0,
+    "deletedDocs": 0,
+    "changedDocs": 0,
+    "chunksAdded": 0,
+    "chunkCount": 1,
+    "errors": [],
+    "startedAt": "2026-02-11T04:37:28.942Z",
+    "finishedAt": "2026-02-11T04:37:28.944Z"
+  }
+}
